@@ -1,6 +1,6 @@
 module slicestack
 
-go 1.25.0
+go 1.26
 
 require github.com/timandy/routine v1.1.6
 
