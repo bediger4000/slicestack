@@ -11,42 +11,10 @@ import (
 )
 
 func main() {
-
 	printHeapAddress()
-	printMyStackAddr()
-
-	doStuff()
-	doStuff2()
-
-}
-
-func doStuff() {
-	fmt.Printf("enter function\n")
-
-	var x []byte
-
-	x = append(x, 'a')
-	x = append(x, 'b')
-
-	fmt.Printf("local slice %p, variable at %p\n", x, &x)
-	fmt.Printf("backing store at %p\n", backingStore(x))
-	fmt.Printf("first element '%c'\n", x[0])
-}
-
-func doStuff2() {
-	fmt.Printf("enter function 2\n")
-
-	var a [2]byte
-
-	x := a[:]
-
-	x[0] = 'a'
-	x[1] = 'b'
-
-	fmt.Printf("local array first element at %p, variable at %p\n", &(a[0]), &a)
-	fmt.Printf("local slice      %p, variable at %p\n", x, &x)
-	fmt.Printf("backing store at %p\n", backingStore(x))
-	fmt.Printf("first element '%c'\n", x[0])
+	printBackingStore()
+	onStack := checkStackAddr()
+	fmt.Printf("Slice backing store on stack: %v\n", onStack)
 }
 
 type sliceHeader struct {
@@ -58,11 +26,20 @@ type sliceHeader struct {
 func backingStore(x []byte) unsafe.Pointer {
 	u := unsafe.Pointer(&x)
 	sh := (*sliceHeader)(u)
-	i := (*byte)(sh.Data)
-	*i = 'Z'
 	return sh.Data
 }
 
+// printBackingStore demonstrates that &(slice[0]) is the
+// address of a slice's backing store
+func printBackingStore() {
+	x := make([]byte, 64)
+	bs := backingStore(x)
+	fmt.Println("slice backing store addressing check")
+	fmt.Printf("backing store at %p\n", bs)
+	fmt.Printf("first element at %p\n\n", &(x[0]))
+}
+
+// printHeapAddress reads /proc/$PID/maps to find system stack and system heap.
 func printHeapAddress() {
 	maps, err := os.ReadFile(fmt.Sprintf("/proc/%d/maps", os.Getpid()))
 	if err != nil {
@@ -70,35 +47,44 @@ func printHeapAddress() {
 	}
 	for _, line := range bytes.Split(maps, []byte{'\n'}) {
 		if bytes.Contains(line, []byte("[anon: Go: heap]")) {
-			fmt.Print("heap:  ")
+			fmt.Print("system heap:  ")
 			fields := bytes.Split(line, []byte{' '})
 			os.Stdout.Write(fields[0])
 			os.Stdout.Write([]byte{'\n'})
 			continue
 		}
 		if bytes.Contains(line, []byte("[stack]")) {
-			fmt.Print("stack: ")
+			fmt.Print("system stack: ")
 			fields := bytes.Split(line, []byte{' '})
 			os.Stdout.Write(fields[0])
-			os.Stdout.Write([]byte{'\n'})
+			os.Stdout.Write([]byte{'\n', '\n'})
 			break
 		}
 	}
 }
 
+// type stack from /usr/lib/go/src/runtime/runtime2.go
 type stack struct {
 	lo uintptr
 	hi uintptr
 }
 
+// part of type g from /usr/lib/go/src/runtime/runtime2.go
 type g struct {
-	stack stack
+	stack       stack
+	stackguard0 uintptr
+	stackguard1 uintptr
 }
 
-func printMyStackAddr() {
-	uptr := routine.Getg()
-	fmt.Printf("%p\n", uptr)
+func checkStackAddr() bool {
+	myg := (*g)(routine.Getg())
 
-	myg := (*g)(uptr)
-	fmt.Printf("my stack:\nhi 0x%x\nlo 0x%x\n", myg.stack.hi, myg.stack.lo)
+	x := make([]byte, 64)
+	backingStore := uintptr(unsafe.Pointer(&(x[0])))
+
+	if myg.stack.hi > backingStore && backingStore > myg.stack.lo {
+		return true
+	}
+
+	return false
 }
