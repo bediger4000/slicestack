@@ -197,7 +197,7 @@ gets my code access to high and low addresses of the goroutine's call stack.
 You can find the address of a slice's backing store from `func unsafe.SliceData()`,
 now part of the standard Go library.
 Calling that function causes the compiler to allocate the slice
-and it's backing store from the heap.
+and its backing store from the heap.
 
 You can also define a new struct, and do some unsafe type conversions:
 
@@ -229,7 +229,7 @@ sl := make([]int, 24)
 backingStoreAddress := unsafe.Pointer(&(sl[0]))
 ```
 
-I don't like that this trick actually works,
+I don't like this trick,
 although the same "take address of first element of an array"
 works in C programs as well.
 
@@ -240,14 +240,14 @@ returns a boolean value partially to avoid
 having the Go compiler's [escape analysis]()
 decide to do heap allocation.
 
-I wrote a number of inobvious things in `func checkStackAddr`
+I avoided doing a number of inobvious things in `func checkStackAddr`
 to avoid escapes to heap in `func checkStackAddr`.
 
 - Allocate slice using `make()`
 - Avoid calling `append()` to set a slice value.
 - Get address of backing store via `uintptr(unsafe.Pointer(&(x[0])))`
 instead of calling `unsafe.SliceData`.
-- Doesn't calling `fmt.Printf()` to show the slice or backing store address.
+- Doesn't call `fmt.Printf()` to show the slice or backing store address.
 - Don't return backing store address or slice itself for output.
 
 Any of these things causes the Go compiler's escape analysis
