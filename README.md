@@ -27,13 +27,6 @@ from the Go runtime.
 Once these 3 pieces of data are available,
 compare address of backing store to the stack addresses.
 
-<!--
-The Go runtime carefully hides stack addresses from a running goroutine.
-The newish standard library function `unsafe.SliceData` can give you
-a slice's backing store address, but for reasons is not useful for
-finding out if stack allocation of slice backing store occurs.
--->
-
 Here's how to set up to get the current goroutine's stack addresses.
 
 ### 1. Obtain code for this repository
@@ -96,13 +89,16 @@ Running it should look something like this:
 
 ```
 $ ./slicestack
-system heap:  186c7e000000-186c7e400000
-system stack: 7ffc35139000-7ffc3515a000
+system heap:  ec882000000-ec882800000
+system stack: 7ffc2822e000-7ffc2824f000
 
 slice backing store addressing check
-backing store at 0x186c7e1980c0
-first element at 0x186c7e1980c0
+backing store at 0xec8823560c0
+first element at 0xec8823560c0
 
+stack top     00000ec8823af000
+backing store 00000ec8823aee60
+stack bottom  00000ec8823ae000
 Slice backing store on stack: true
 ```
 
@@ -122,23 +118,27 @@ the stack's high and low addresses.
 ```
  1	func checkStackAddr() bool {
  2	    myg := (*g)(routine.Getg())
- 3	
+ 3	    
  4	    x := make([]byte, 64)
  5	    backingStore := uintptr(unsafe.Pointer(&(x[0])))
  6	
- 7	    if myg.stack.hi > backingStore && backingStore > myg.stack.lo {
- 8	        return true
- 9	    }
-10	
-11	    return false
-12	}
+ 7	    fmt.Printf("stack top     %016x\n", myg.stack.hi)
+ 8	    fmt.Printf("backing store %016x\n", backingStore)
+ 9	    fmt.Printf("stack bottom  %016x\n", myg.stack.lo)
+10	    
+11	    if backingStore > myg.stack.hi || backingStore < myg.stack.lo {
+12	        return false
+13	    }
+14	
+15	    return true
+16	}
 ```
 
 - Line 2 calls the exported function added to `package routine`.
 - Line 4 allocates a slice with 64 bytes of backing storage.
 - Line 5 obtains the address of the backing store,
 *without triggering the slice escaping to the heap*.
-- Line 7 checks that the address of the backing store
+- Line 11 checks that the address of the backing store
 lies between the goroutine stack's high and low addresses.
 
 ## How this code does it
@@ -240,19 +240,17 @@ returns a boolean value partially to avoid
 having the Go compiler's [escape analysis]()
 decide to do heap allocation.
 
-I avoided doing a number of inobvious things in `func checkStackAddr`
+I avoided doing a couple of inobvious things in `func checkStackAddr`
 to avoid escapes to heap in `func checkStackAddr`.
 
-- Allocate slice using `make()`
-- Avoid calling `append()` to set a slice value.
-- Get address of backing store via `uintptr(unsafe.Pointer(&(x[0])))`
-instead of calling `unsafe.SliceData`.
-- Doesn't call `fmt.Printf()` to show the slice or backing store address.
+- Don't call `fmt.Printf()` to show the slice or backing store address.
 - Don't return backing store address or slice itself for output.
 
-Any of these things causes the Go compiler's escape analysis
-to allocate slice and backing store from the heap.
-My [example compilation](#4-compile-and-run-program)
+I did discover that type converting slice backing store addresses
+from, say `*byte` to `uintptr` via `unsafe.Pointer` seems to fool
+escape analyis.
+
+My [example compilation](#4-compile-and-run-program) command line
 saves escape analysis output to a file to demonstrate.
 Add a `fmt.Printf("%p\n", backingStore)` after line 5
 of [func checkStackAddr](#what-does-this-code-do).
