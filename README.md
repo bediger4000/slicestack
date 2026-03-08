@@ -171,7 +171,7 @@ type g struct {
 I lifted `type stack` verbatim from `/usr/lib/go/src/runtime/runtime2.go`.
 My `type g struct` is the first 3 elements of a Go runtime unexported `type g`.
 Since `routine.Getg()` returns a value of type `unsafe.Pointer`,
-doing a type converstion to my `type g struct` of that `unsafe.Pointer` value
+doing a type conversion to my `type g struct` of that `unsafe.Pointer` value
 gets my code access to high and low addresses of the goroutine's call stack.
 
 ### Type system head fake 2.
@@ -215,3 +215,24 @@ works in C programs as well.
 returns a boolean value partially to avoid
 having the Go compiler's [escape analysis]()
 decide to do heap allocation.
+
+I wrote a number of inobvious things in `func checkStackAddr`
+to avoid escapes to heap in `func checkStackAddr`.
+
+- Allocate slice using `make()`
+- Avoid calling `append()` to set a slice value.
+- Get address of backing store via `uintptr(unsafe.Pointer(&(x[0])))`
+instead of calling `unsafe.SliceData`.
+- Doesn't calling `fmt.Printf()` to show the slice or backing store address.
+- Don't return backing store address or slice itself for output.
+
+Any of these things causes the Go compiler's escape analysis
+to allocate slice and backing store from the heap.
+My [example compilation](#4-compile-and-run-program)
+saves escape analysis output to a file to demonstrate.
+Add a `fmt.Printf("%p\n", backingStore)` after line 5
+of [func checkStackAddr](#what-does-this-code-do).
+Re-compile as shown. 
+A look in resulting file `escape.analysis` will show that
+slice `x` escapes to the heap.
+Running the program will cause `func checkStackAddr` to return false as well.
