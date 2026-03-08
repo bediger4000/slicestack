@@ -157,7 +157,7 @@ to be honest.
 
 Unfortunately, `package routine` doesn't export the function
 resulting from the linker sleight of hand.
-My compilation procedure adds an exported function, `routine.Getg() unsafe.Pointer`,
+My compilation procedure adds an exported function, `func routine.Getg() unsafe.Pointer`,
 to the local clone of the source code.
 After compiling with the local source code,
 my code can receive the return value of Go runtime `func getg()`,
@@ -182,8 +182,9 @@ type g struct {
 ```
 I lifted `type stack` verbatim from `/usr/lib/go/src/runtime/runtime2.go`.
 My `type g struct` is the first 3 elements of a Go runtime unexported `type g`.
-Instances of `type g` represent all necessary info about a goroutine,
+Instances of `type g` inside the Go runtime represent all necessary info about a goroutine,
 including its call stack.
+I'm interested in only the `stack` element.
 
 Official [Go documentation](https://github.com/golang/go/blob/master/src/runtime/HACKING.md)
 talks about `type g` and other relevant runtime things.
@@ -243,12 +244,20 @@ decide to do heap allocation.
 I avoided doing a couple of inobvious things in `func checkStackAddr`
 to avoid escapes to heap in `func checkStackAddr`.
 
-- Don't call `fmt.Printf()` to show the slice or backing store address.
+- Don't call `fmt.Printf()` to show the slice or backing store address
+with the wrong type argument.
 - Don't return backing store address or slice itself for output.
 
 I did discover that type converting slice backing store addresses
 from, say `*byte` to `uintptr` via `unsafe.Pointer` seems to fool
 escape analyis.
+
+The compiler must be aware of something special
+about function `unsafe.SliceData`.
+Calling any other function with a slice argument seems to cause
+the compiler to set heap allocation for that slice.
+Note that the allocation of a slice takes place before the function call or return
+statement that causes an escape to heap.
 
 My [example compilation](#4-compile-and-run-program) command line
 saves escape analysis output to a file to demonstrate.
