@@ -112,6 +112,10 @@ can be obtained with `&(slice[0])`.
 3. It checks that a slice's backing store gets allocated
 on the goroutine's stack.
 
+This is the function that allocates a slice, finds stack addresses,
+and checks that the address of the backing store is between
+the stack's high and low addresses.
+
 ```
  1	func checkStackAddr() bool {
  2	    myg := (*g)(routine.Getg())
@@ -138,19 +142,24 @@ lies between the goroutine stack's high and low addresses.
 
 ### Compiler shenanigans
 
-The procedure above does some compiler shenanigans
-to get around Go's strict type system, and to get access to the Go runtime
-at run time.
+The procedure above plays some compiler tricks
+to get around Go's strict type system,
+and to get access to the Go runtime at run time.
 
-My program uses code in `package routine`
-that "exports" a Go runtime function `func getgc() *g`
-by doing some linker sleight of hand.
+Code in `package routine`
+gains access to a Go runtime function `func getgc() *g`
+via linker sleight of hand.
+This is the real weird stuff, and very exacting work,
+to be honest.
 
-Unfortunately, `package routine` doesn't export its own function.
+Unfortunately, `package routine` doesn't export the function
+resulting from the linker sleight of hand.
 My compilation procedure adds an exported function, `routine.Getg() unsafe.Pointer`,
 to the local clone of the source code.
 After compiling with the local source code,
-my code can receive the return value of Go runtime `func getg()`.
+my code can receive the return value of Go runtime `func getg()`,
+and from that, get addresses of the top and bottom of the current
+goroutine's call stack.
 
 ### Type system head fake 1.
 
@@ -170,6 +179,8 @@ type g struct {
 ```
 I lifted `type stack` verbatim from `/usr/lib/go/src/runtime/runtime2.go`.
 My `type g struct` is the first 3 elements of a Go runtime unexported `type g`.
+Instances of `type g` represent all necessary info about a goroutine,
+including its call stack.
 Since `routine.Getg()` returns a value of type `unsafe.Pointer`,
 doing a type conversion to my `type g struct` of that `unsafe.Pointer` value
 gets my code access to high and low addresses of the goroutine's call stack.
