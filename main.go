@@ -81,6 +81,19 @@ func checkStackAddr() bool {
 
 	x := make([]byte, 64)
 	backingStore := uintptr(unsafe.Pointer(&(x[0])))
+	// fool escape analysis
+	fmt.Printf("stack top     %016x\n", myg.stack.hi)
+	b1 := byte(0xff & (backingStore >> 56))
+	b2 := byte(0xff & (backingStore >> 48))
+	b3 := byte(0xff & (backingStore >> 40))
+	b4 := byte(0xff & (backingStore >> 32))
+	b5 := byte(0xff & (backingStore >> 24))
+	b6 := byte(0xff & (backingStore >> 16))
+	b7 := byte(0xff & (backingStore >> 8))
+	b8 := byte(0xff & (backingStore >> 0))
+	fmt.Printf("backing store %02x%02x%02x%02x", b1, b2, b3, b4)
+	fmt.Printf("%02x%02x%02x%02x\n", b5, b6, b7, b8)
+	fmt.Printf("stack bottom  %016x\n", myg.stack.lo)
 
 	if myg.stack.hi > backingStore && backingStore > myg.stack.lo {
 		return true
