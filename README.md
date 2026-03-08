@@ -3,11 +3,11 @@
 [The Go Blog](https://go.dev/blog/)
 has a post titled
 [Allocating on the Stack](https://go.dev/blog/allocation-optimizations).
-
-The Go Blog post makes the claim that 
+The post makes the claim that 
 programs compiled with Go v1.26 compiler,
 and using the v1.26 runtime
-allocate backing store of slices on the stack.
+can allocate backing store of slices on the stack
+under some circumstances.
 Performance gains ensue,
 presumably because CPU hardware has instructions to push and pop stack frames
 for function calls,
@@ -27,11 +27,14 @@ from the Go runtime.
 Once these 3 pieces of data are available,
 compare address of backing store to the stack addresses.
 
+<!--
 The Go runtime carefully hides stack addresses from a running goroutine.
 The newish standard library function `unsafe.SliceData` can give you
 a slice's backing store address, but for reasons is not useful for
 finding out if stack allocation of slice backing store occurs.
+-->
 
+Here's how to set up to get the current goroutine's stack addresses.
 
 ### 1. Obtain code for this repository
 
@@ -81,7 +84,7 @@ This piece of prestidigitation lets you specify that the newly added `func Getg(
 will actually be compiled from the *modified* `package routine`,
 not some plain vanilla, rule bound `package routine` downloaded from the internet.
 
-### 4. Compile and run program
+## Compile and run program
 
 ```
 $ cd $GOPATH/src/slicestack
@@ -103,13 +106,13 @@ first element at 0x186c7e1980c0
 Slice backing store on stack: true
 ```
 
-## What does this code do?
+### What does this code do?
 
-1. It prints the traditional Unix heap and stack memory allocations,
+1. Prints the traditional Unix heap and stack memory allocations,
 via reading `/proc/$PID/maps` pseudo-file.
-2. It proves that the address of slice's backing store
+2. Demonstrates that the address of slice's backing store
 can be obtained with `&(slice[0])`.
-3. It checks that a slice's backing store gets allocated
+3. Checks that a slice's backing store gets allocated
 on the goroutine's stack.
 
 This is the function that allocates a slice, finds stack addresses,
@@ -143,13 +146,13 @@ lies between the goroutine stack's high and low addresses.
 ### Compiler shenanigans
 
 The procedure above plays some compiler tricks
-to get around Go's strict type system,
-and to get access to the Go runtime at run time.
+to get access to a struct that
+has the current goroutine's stack addresses.
 
 Code in `package routine`
 gains access to a Go runtime function `func getgc() *g`
 via linker sleight of hand.
-This is the real weird stuff, and very exacting work,
+This is real weird stuff, and very exacting work,
 to be honest.
 
 Unfortunately, `package routine` doesn't export the function
@@ -181,6 +184,10 @@ I lifted `type stack` verbatim from `/usr/lib/go/src/runtime/runtime2.go`.
 My `type g struct` is the first 3 elements of a Go runtime unexported `type g`.
 Instances of `type g` represent all necessary info about a goroutine,
 including its call stack.
+
+Official [Go documentation](https://github.com/golang/go/blob/master/src/runtime/HACKING.md)
+talks about `type g` and other relevant runtime things.
+
 Since `routine.Getg()` returns a value of type `unsafe.Pointer`,
 doing a type conversion to my `type g struct` of that `unsafe.Pointer` value
 gets my code access to high and low addresses of the goroutine's call stack.
@@ -188,8 +195,11 @@ gets my code access to high and low addresses of the goroutine's call stack.
 ### Type system head fake 2.
 
 You can find the address of a slice's backing store from `func unsafe.SliceData()`,
-now part of the standard Go library,
-or by defining a new struct, and some unsafe type conversions:
+now part of the standard Go library.
+Calling that function causes the compiler to allocate the slice
+and it's backing store from the heap.
+
+You can also define a new struct, and do some unsafe type conversions:
 
 ```
 type sliceHeader struct {
@@ -205,9 +215,12 @@ func backingStore(x []byte) unsafe.Pointer {
 }
 ```
 
-Or you can take advantage of the organization of slice structs
-in the Go runtime.
+Calling `func backingStore` also causes the compiler to allocate
+slice and backing store on the heap,
+so you'd have to include this code in-line.
 
+It's simpler to take advantage of the organization of slice structs
+in the Go runtime.
 It turns out that doing something like the following actually gives you the address
 of a slice's backing store:
 
@@ -220,7 +233,7 @@ I don't like that this trick actually works,
 although the same "take address of first element of an array"
 works in C programs as well.
 
-### Don't try to fool escape analysis
+### Avoid escape analysis causing heap allocation
 
 [func checkStackAddr](#what-does-this-code-do)
 returns a boolean value partially to avoid
