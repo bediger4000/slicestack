@@ -146,9 +146,11 @@ My program uses code in `package routine`
 that "exports" a Go runtime function `func getgc() *g`
 by doing some linker sleight of hand.
 
-Unfortunately, `package routine` doesn't export its own function,
-so the procedure adds an exported function, `routine.Getg() unsafe.Pointer`
-so that my code can receive the return value of Go runtime `func getg()`.
+Unfortunately, `package routine` doesn't export its own function.
+My compilation procedure adds an exported function, `routine.Getg() unsafe.Pointer`,
+to the local clone of the source code.
+After compiling with the local source code,
+my code can receive the return value of Go runtime `func getg()`.
 
 ### Type system head fake 1.
 
@@ -207,5 +209,9 @@ I don't like that this trick actually works,
 although the same "take address of first element of an array"
 works in C programs as well.
 
-Given the Go compiler's [escape analysis](),
-it is tricky to ensure code that allocates on a goroutine's stack.
+### Don't try to fool escape analysis
+
+[func checkStackAddr](#what-does-this-code-do)
+returns a boolean value partially to avoid
+having the Go compiler's [escape analysis]()
+decide to do heap allocation.
