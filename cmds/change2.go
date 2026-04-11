@@ -52,7 +52,8 @@ func startRecursion() {
 	fmt.Printf("local uintptr val 2 %016x\n", localUintptr)
 }
 
-// enlargeStack recurses until formal argument has zero value
+// enlargeStack recurses until formal argument has zero value,
+// or the top-of-stack address changes
 func enlargeStack(oldHi uintptr) {
 	currentHi := myg.stack.hi
 	if currentHi != oldHi {
